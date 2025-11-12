@@ -8,293 +8,160 @@ entity registro_bcd is
         reset : in STD_LOGIC;
         tecla_valida : in STD_LOGIC;
         tecla_codigo : in STD_LOGIC_VECTOR(3 downto 0);
-        numero_bcd : out STD_LOGIC_VECTOR(15 downto 0);
+        
+        -- Salidas
+        numero_bcd : out STD_LOGIC_VECTOR(15 downto 0); -- Muestra el número mientras se captura
         bcd_A : out STD_LOGIC_VECTOR(15 downto 0);
         bcd_B : out STD_LOGIC_VECTOR(15 downto 0);
-  
-      operacion : out STD_LOGIC_VECTOR(2 downto 0);  -- << CORREGIDO A 3 BITS
-        led_dato_A : out STD_LOGIC;
-        led_dato_B : out STD_LOGIC;
-        led_dato_guardado : out STD_LOGIC;
-        led_operacion_realizada : out STD_LOGIC
+        operacion : out STD_LOGIC_VECTOR(2 downto 0);
+        
+        -- LEDs
+        led_dato_A : out STD_LOGIC; -- Capturando A / Esperando Op
+        led_dato_B : out STD_LOGIC; -- Capturando B
+        led_dato_guardado : out STD_LOGIC; -- A está guardado
+        led_operacion_realizada : out STD_LOGIC -- Mostrando resultado
     );
-end registro_bcd;
+end entity registro_bcd;
 
-architecture Behavioral of registro_bcd is
-    type bcd_array is array (3 downto 0) of STD_LOGIC_VECTOR(3 downto 0);
-signal digits : bcd_array := (others => "0000");
-    signal dato_A : bcd_array := (others => "0000");
-signal dato_B : bcd_array := (others => "0000");
-    
-    constant DELAY_MAX   : integer := 500000;
-signal shift_stage   : integer range 0 to 4 := 0;
-    signal delay_counter : integer := 0;
-signal update_pending : std_logic := '0';
-    signal new_digit      : std_logic_vector(3 downto 0);
--- Estados para controlar el flujo
-    signal capturando_A : STD_LOGIC := '0';
-signal capturando_B : STD_LOGIC := '0';
-    signal dato_A_guardado : STD_LOGIC := '0';
-    signal dato_B_guardado : STD_LOGIC := '0';
-signal mostrar_dato_A : STD_LOGIC := '0';
-    signal mostrar_dato_B : STD_LOGIC := '0';
-    signal mostrar_suma : STD_LOGIC := '0';
-signal mostrar_resta : STD_LOGIC := '0';
-    signal mostrar_multiplicacion : STD_LOGIC := '0';
-    signal mostrar_division : STD_LOGIC := '0';     -- << AÑADIDO
-    signal mostrar_modulo : STD_LOGIC := '0';       -- << AÑADIDO
--- Señales para detección de flanco
+architecture FSM_PDF of registro_bcd is
+
+    -- Definición de la Máquina de Estados Finito (FSM)
+    type t_estado is (
+        sIDLE,          -- Esperando inicio (Tecla A para Dato A)
+        sCAPTURA_A,     -- Capturando dígitos para A
+        sESPERA_OP,     -- A guardado, esperando tecla de operación (B,C,D,etc)
+        sCAPTURA_B,     -- Operación guardada, capturando dígitos para B
+        sMOSTRAR_RES    -- B guardado, ALU calcula, se muestra resultado
+    );
+    signal estado_actual : t_estado := sIDLE;
+
+    -- Registros internos para almacenar los datos
+    signal bcd_digits_reg : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
+    signal bcd_A_reg      : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
+    signal bcd_B_reg      : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
+    signal op_reg         : STD_LOGIC_VECTOR(2 downto 0) := "000";
+
+    -- Detección de flanco (para evitar registrar una tecla múltiples veces)
     signal last_tecla_valida : STD_LOGIC := '0';
     signal tecla_valida_edge : STD_LOGIC;
+
+    -- Códigos de teclas (basados en tu escaneo.vhd)
+    constant KEY_A : std_logic_vector(3 downto 0) := "1010"; -- A
+    constant KEY_B : std_logic_vector(3 downto 0) := "1011"; -- B (SUMA)
+    constant KEY_C : std_logic_vector(3 downto 0) := "1100"; -- C (RESTA)
+    constant KEY_D : std_logic_vector(3 downto 0) := "1101"; -- D (MULT)
+    constant KEY_S : std_logic_vector(3 downto 0) := "1110"; -- * (MODULO)
+    constant KEY_P : std_logic_vector(3 downto 0) := "1111"; -- # (DIVISION)
+
 begin
-    -- Detección de flanco de subida de tecla_valida
-    tecla_valida_edge <= tecla_valida and not last_tecla_valida;
-process(clk, reset)
+
+    -- Proceso de detección de flanco
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            last_tecla_valida <= tecla_valida;
+        end if;
+    end process;
+    
+    tecla_valida_edge <= tecla_valida and (not last_tecla_valida);
+
+    -- Proceso principal de la FSM
+    process(clk, reset)
     begin
         if reset = '0' then
-            digits <= (others => "0000");
-dato_A <= (others => "0000");
-            dato_B <= (others => "0000");
-            shift_stage <= 0;
-            delay_counter <= 0;
-            update_pending <= '0';
-new_digit <= "0000";
-            capturando_A <= '0';
-            capturando_B <= '0';
-            dato_A_guardado <= '0';
-            dato_B_guardado <= '0';
-            mostrar_dato_A <= '0';
-mostrar_dato_B <= '0';
-            mostrar_suma <= '0';
-            mostrar_resta <= '0';
-            mostrar_multiplicacion <= '0';
-            mostrar_division <= '0';      -- << AÑADIDO
-            mostrar_modulo <= '0';        -- << AÑADIDO
-            last_tecla_valida <= '0';
-elsif rising_edge(clk) then
+            -- Resetear todos los registros y el estado
+            estado_actual <= sIDLE;
+            bcd_digits_reg <= (others => '0');
+            bcd_A_reg <= (others => '0');
+            bcd_B_reg <= (others => '0');
+            op_reg <= "000";
             
-            -- Registrar el estado anterior para detección de flanco
-            last_tecla_valida <= tecla_valida;
+        elsif rising_edge(clk) then
             
-            -- Lógica de captura de 'A' (sin cambios)
-if tecla_valida_edge = '1' and tecla_codigo = "1010" then -- 'A'
-                if capturando_A = '0' and capturando_B = '0' and mostrar_dato_A = '0' and mostrar_dato_B = '0' and mostrar_suma = '0' and mostrar_resta = '0' and mostrar_multiplicacion = '0' then
-capturando_A <= '1';
-mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-elsif mostrar_dato_A = '1' then
-                    capturando_A <= '1';
-mostrar_dato_A <= '0';
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-elsif capturando_A = '1' then
-                    dato_A <= digits;
-dato_A_guardado <= '1';
-                    capturando_A <= '0';
-                    mostrar_dato_A <= '1';  
-                    mostrar_dato_B <= '0';
-mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-                    new_digit <= "0000";
-                    update_pending <= '0';
-shift_stage <= 0;
-                    delay_counter <= 0;
-                end if;
-            end if;
+            -- Solo actuar si hay un flanco de subida de tecla_valida
+            if tecla_valida_edge = '1' then
+                
+                case estado_actual is
+                
+                    -- Estado IDLE: Esperando 'A' para iniciar
+                    when sIDLE =>
+                        if tecla_codigo = KEY_A then
+                            estado_actual <= sCAPTURA_A;
+                            bcd_digits_reg <= (others => '0');
+                        end if;
+                        
+                    -- Estado CAPTURA_A: Capturando dígitos para A
+                    when sCAPTURA_A =>
+                        if tecla_codigo <= "1001" then -- Si es un dígito 0-9
+                            -- Desplazar dígito nuevo
+                            bcd_digits_reg <= bcd_digits_reg(11 downto 0) & tecla_codigo;
+                        elsif tecla_codigo = KEY_A then -- 'A' para confirmar Dato A
+                            bcd_A_reg <= bcd_digits_reg;
+                            estado_actual <= sESPERA_OP;
+                            bcd_digits_reg <= (others => '0'); -- Limpiar para B
+                        end if;
 
-            -- Lógica de captura de 'B' (tu lógica original)
-if tecla_valida_edge = '1' and tecla_codigo = "1011" then -- 'B'
-                if dato_A_guardado = '1' and capturando_A = '0' and capturando_B = '0' and mostrar_dato_B = '0' and mostrar_suma = '0' and mostrar_resta = '0' and mostrar_multiplicacion = '0' then
-capturando_B <= '1';
-mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-elsif mostrar_dato_B = '1' then
-                    capturando_B <= '1';
-mostrar_dato_B <= '0';
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-elsif capturando_B = '1' then
-                    dato_B <= digits;
-dato_B_guardado <= '1';
-                    capturando_B <= '0';
-                    mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '1';
-mostrar_suma <= '0';
-mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    digits <= (others => "0000");
-                    new_digit <= "0000";
-                    update_pending <= '0';
-                    shift_stage <= 0;
-delay_counter <= 0;
-                end if;
-            end if;
-            
-            -- Capturar dígitos numéricos (sin cambios)
-if (capturando_A = '1' or capturando_B = '1') and 
-               tecla_valida_edge = '1' and tecla_codigo <= "1001" then
-                new_digit <= tecla_codigo;
-                update_pending <= '1';
-                shift_stage <= 0;
-                delay_counter <= 0;
-            end if;
+                    -- Estado ESPERA_OP: A guardado, esperando operación
+                    when sESPERA_OP =>
+                        case tecla_codigo is
+                            when KEY_B => -- SUMA
+                                op_reg <= "000";
+                                estado_actual <= sCAPTURA_B;
+                            when KEY_C => -- RESTA
+                                op_reg <= "001";
+                                estado_actual <= sCAPTURA_B;
+                            when KEY_D => -- MULT
+                                op_reg <= "010";
+                                estado_actual <= sCAPTURA_B;
+                            when KEY_P => -- '#' DIVISION
+                                op_reg <= "011";
+                                estado_actual <= sCAPTURA_B;
+                            when KEY_S => -- '*' MODULO
+                                op_reg <= "100";
+                                estado_actual <= sCAPTURA_B;
+                            when KEY_A => -- Si presiona 'A' de nuevo, reinicia Dato A
+                                estado_actual <= sCAPTURA_A;
+                                bcd_digits_reg <= (others => '0');
+                            when others =>
+                                null;
+                        end case;
 
-            -- ****** LÓGICA DE OPERACIONES CORREGIDA ******
-            -- (Basada en las teclas del PDF [cite: 417-423] y tu escaneo.vhd)
+                    -- Estado CAPTURA_B: Capturando dígitos para B
+                    when sCAPTURA_B =>
+                        if tecla_codigo <= "1001" then -- Si es un dígito 0-9
+                            bcd_digits_reg <= bcd_digits_reg(11 downto 0) & tecla_codigo;
+                        elsif tecla_codigo = KEY_A then -- 'A' para CALCULAR
+                            bcd_B_reg <= bcd_digits_reg;
+                            estado_actual <= sMOSTRAR_RES;
+                        end if;
 
-            -- Tecla 'B' (1011) -> SUMA
-            -- (Tu lógica actual usa 'B' para capturar, la dejo pero
-            -- la lógica del PDF indica que 'B' es SUMA[cite: 417].
-            -- Por ahora, implemento las otras 4 operaciones)
-            -- NOTA: Tu lógica para 'C' era SUMA, la elimino.
+                    -- Estado MOSTRAR_RES: Mostrando resultado
+                    when sMOSTRAR_RES =>
+                        if tecla_codigo = KEY_A then -- 'A' para reiniciar
+                            estado_actual <= sIDLE;
+                            bcd_digits_reg <= (others => '0');
+                            bcd_A_reg <= (others => '0');
 
-            -- Tecla 'C' (1100) -> RESTA
-    if tecla_valida_edge = '1' and tecla_codigo = "1100" then -- 'C'
-        if dato_A_guardado = '1' and dato_B_guardado = '1' then
-                    mostrar_suma <= '0';
-        mostrar_resta <= '1';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                end if;
-            end if;
-
-            -- Tecla 'D' (1101) -> MULTIPLICACIÓN
-            if tecla_valida_edge = '1' and tecla_codigo = "1101" then -- 'D'
-                if dato_A_guardado = '1' and dato_B_guardado = '1' then
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '1';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '0';
-                    mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                end if;
-            end if;
-
-            -- Tecla '#' (1111) -> DIVISIÓN
-    if tecla_valida_edge = '1' and tecla_codigo = "1111" then -- '#'
-        if dato_A_guardado = '1' and dato_B_guardado = '1' then
-                    mostrar_suma <= '0';
-        mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '1';
-                    mostrar_modulo <= '0';
-                    mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                end if;
-            end if;
-
-            -- Tecla '*' (1110) -> MÓDULO
-            if tecla_valida_edge = '1' and tecla_codigo = "1110" then -- '*'
-                if dato_A_guardado = '1' and dato_B_guardado = '1' then
-                    mostrar_suma <= '0';
-                    mostrar_resta <= '0';
-                    mostrar_multiplicacion <= '0';
-                    mostrar_division <= '0';
-                    mostrar_modulo <= '1';
-                    mostrar_dato_A <= '0';
-                    mostrar_dato_B <= '0';
-                end if;
-            end if;
-            -- ****** FIN DE LÓGICA DE OPERACIONES ******
-
-            -- Corrimiento con retardo (sin cambios)
-    if update_pending = '1' then
-                if delay_counter < DELAY_MAX then
-                    delay_counter <= delay_counter + 1;
-    else
-                    delay_counter <= 0;
-    case shift_stage is
-                        when 0 =>
-                            digits(3) <= digits(2);
-            shift_stage <= 1;
-                        when 1 =>
-                            digits(2) <= digits(1);
-            shift_stage <= 2;
-                        when 2 =>
-                            digits(1) <= digits(0);
-            shift_stage <= 3;
-                        when 3 =>
-                            digits(0) <= new_digit;
-            shift_stage <= 4;
-                        when others =>
-                            update_pending <= '0';
-    end case;
-                end if;
+                            bcd_B_reg <= (others => '0');
+                        end if;
+                        
+                end case;
             end if;
         end if;
     end process;
-    
-    -- Seleccionar qué número mostrar (sin cambios)
-process(digits, dato_A, dato_B, capturando_A, capturando_B, mostrar_dato_A, mostrar_dato_B, mostrar_suma, mostrar_resta, mostrar_multiplicacion)
-    begin
-        if capturando_A = '1' or capturando_B = '1' then
-            numero_bcd <= digits(3) & digits(2) & digits(1) & digits(0);
-elsif mostrar_dato_A = '1' then
-            numero_bcd <= dato_A(3) & dato_A(2) & dato_A(1) & dato_A(0);
-elsif mostrar_dato_B = '1' then
-            numero_bcd <= dato_B(3) & dato_B(2) & dato_B(1) & dato_B(0);
-elsif mostrar_suma = '1' or mostrar_resta = '1' or mostrar_multiplicacion = '1' then
-            numero_bcd <= (others => '0'); 
-else
-            numero_bcd <= digits(3) & digits(2) & digits(1) & digits(0);
-end if;
-    end process;
 
-    bcd_A <= dato_A(3) & dato_A(2) & dato_A(1) & dato_A(0);
-bcd_B <= dato_B(3) & dato_B(2) & dato_B(1) & dato_B(0);
+    -- Asignación de salidas (Combinacional)
+    bcd_A <= bcd_A_reg;
+    bcd_B <= bcd_B_reg;
+    operacion <= op_reg;
     
-    -- ****** PROCESO DE ASIGNACIÓN DE OPERACIÓN CORREGIDO ******
-    process(mostrar_suma, mostrar_resta, mostrar_multiplicacion, mostrar_division, mostrar_modulo)
-    begin
-        if mostrar_suma = '1' then
-            operacion <= "000"; -- Suma
-        elsif mostrar_resta = '1' then
-            operacion <= "001"; -- Resta
-        elsif mostrar_multiplicacion = '1' then
-            operacion <= "010"; -- Multiplicación
-        elsif mostrar_division = '1' then
-            operacion <= "011"; -- División
-        elsif mostrar_modulo = '1' then
-            operacion <= "100"; -- Módulo
-        else
-            operacion <= "000"; -- Estado por defecto (Suma)
-        end if;
-    end process;
-    -- ****** FIN DEL PROCESO CORREGIDO ******
+    -- El display debe mostrar lo que se está tecleando
+    numero_bcd <= bcd_digits_reg;
     
-led_dato_A <= capturando_A;
-    led_dato_B <= capturando_B;
-    led_dato_guardado <= '1' when dato_A_guardado = '1' and dato_B_guardado = '1' else '0';
-led_operacion_realizada <= '1' when mostrar_suma = '1' or mostrar_resta = '1' or mostrar_multiplicacion = '1' or mostrar_division = '1' or mostrar_modulo = '1' else '0';
+    -- Control de LEDs
+    led_dato_A <= '1' when estado_actual = sCAPTURA_A or estado_actual = sESPERA_OP else '0';
+    led_dato_guardado <= '1' when estado_actual = sESPERA_OP or estado_actual = sCAPTURA_B or estado_actual = sMOSTRAR_RES else '0';
+    led_dato_B <= '1' when estado_actual = sCAPTURA_B else '0';
+    led_operacion_realizada <= '1' when estado_actual = sMOSTRAR_RES else '0';
 
-end Behavioral;
+end architecture FSM_PDF;

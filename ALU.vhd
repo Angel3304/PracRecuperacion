@@ -1,12 +1,13 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.NUMERIC_STD.ALL; -- << AÑADIDO
+
+-- Ya no necesitamos NUMERIC_STD aquí
 
 entity ALU_completa is
     Port (
         binario_A : in STD_LOGIC_VECTOR(13 downto 0);
         binario_B : in STD_LOGIC_VECTOR(13 downto 0);
-        operacion : in STD_LOGIC_VECTOR(2 downto 0);  -- << CORREGIDO A 3 BITS
+        operacion : in STD_LOGIC_VECTOR(2 downto 0);  -- 3 bits
         resultado : out STD_LOGIC_VECTOR(13 downto 0);
         flag_overflow : out STD_LOGIC;
         flag_negativo : out STD_LOGIC
@@ -14,12 +15,20 @@ entity ALU_completa is
 end ALU_completa;
 
 architecture Behavioral of ALU_completa is
+    -- Señales para los resultados de los componentes
     signal resultado_suma_resta : std_logic_vector(13 downto 0);
-signal resultado_mult : std_logic_vector(13 downto 0);
-    signal overflow_sr : std_logic;
-    signal negativo_sr : std_logic;
-    signal overflow_mult : std_logic;
-component sumador_14bits_simple 
+    signal resultado_mult : std_logic_vector(13 downto 0);
+    signal resultado_div_cociente : std_logic_vector(13 downto 0); -- NUEVO
+    signal resultado_div_residuo : std_logic_vector(13 downto 0); -- NUEVO
+    
+    -- Señales para los flags de los componentes
+    signal overflow_sr_int : std_logic;
+    signal negativo_sr_int : std_logic;
+    signal overflow_mult_int : std_logic;
+    signal overflow_div_int : std_logic; -- NUEVO (para división por cero)
+    
+    -- Componente Sumador/Restador (de Full_adder_Vector_de_bits.vhd)
+    component sumador_14bits_simple 
         port (
             A, B : in std_logic_vector(13 downto 0);
             op_resta : in STD_LOGIC;
@@ -27,8 +36,9 @@ component sumador_14bits_simple
             Carry_out : out std_logic;
             flag_negativo : out STD_LOGIC
         );
-end component;
+    end component;
     
+    -- Componente Multiplicador (de Mult4x4.vhd)
     component multiplicador_14bits
         port (
             A_in : in STD_LOGIC_VECTOR(13 downto 0);
@@ -36,83 +46,95 @@ end component;
             RESULT : out STD_LOGIC_VECTOR(13 downto 0);
             overflow : out STD_LOGIC
         );
-end component;
+    end component;
+
+    -- *** NUEVO COMPONENTE DIVISOR ***
+    component divisor_14bits
+        port (
+            A_in : in STD_LOGIC_VECTOR(13 downto 0); -- Dividendo
+            B_in : in STD_LOGIC_VECTOR(13 downto 0); -- Divisor
+            Cociente : out STD_LOGIC_VECTOR(13 downto 0);
+            Residuo : out STD_LOGIC_VECTOR(13 downto 0);
+            Div_por_cero : out STD_LOGIC
+        );
+    end component;
     
 begin
-    -- Sumador/Restador
-    SUMADOR_RESTADOR: sumador_14bits_simple 
+    -- Instanciación del Sumador/Restador
+    U_SUM_REST: sumador_14bits_simple 
         port map (
             A => binario_A,
             B => binario_B,
-            op_resta => operacion(0),
+            op_resta => operacion(0), -- "000" y "001" controlan esto
             Res => resultado_suma_resta,
-            Carry_out => overflow_sr,
-     flag_negativo => negativo_sr
+            Carry_out => overflow_sr_int, -- (No se usa directamente, pero se conecta)
+            flag_negativo => negativo_sr_int
         );
--- Multiplicador
-    MULTIPLICADOR: multiplicador_14bits
+
+    -- Instanciación del Multiplicador
+    U_MULT: multiplicador_14bits
         port map (
             A_in => binario_A,
             B_in => binario_B,
             RESULT => resultado_mult,
-            overflow => overflow_mult
+            overflow => overflow_mult_int
+        );
+
+    -- *** NUEVA INSTANCIACIÓN DEL DIVISOR ***
+    U_DIV: divisor_14bits
+        port map (
+            A_in => binario_A,
+            B_in => binario_B,
+            Cociente => resultado_div_cociente,
+            Residuo => resultado_div_residuo,
+            Div_por_cero => overflow_div_int
         );
         
-    -- Multiplexor de resultados y lógica de flags
-process(operacion, binario_A, binario_B, resultado_suma_resta, resultado_mult, negativo_sr, overflow_mult)
+    -- Proceso combinacional para seleccionar la SALIDA y los FLAGS
+    process(operacion, resultado_suma_resta, resultado_mult, resultado_div_cociente, resultado_div_residuo,
+            negativo_sr_int, overflow_mult_int, overflow_div_int, resultado_suma_resta)
     begin
+        -- Lógica de Flags por defecto
+        flag_overflow <= '0';
+        flag_negativo <= '0';
+        
+        -- Selección de resultado
         case operacion is
-            when "000" =>   -- SUMA (antes "00")
+            when "000" =>   -- SUMA
                 resultado <= resultado_suma_resta;
-if resultado_suma_resta > "10011100001111" then  -- 9999 en binario
+                -- Lógica de overflow para SUMA (mayor a 9999)
+                if resultado_suma_resta > "10011100001111" then
                     flag_overflow <= '1';
-else
+                else
                     flag_overflow <= '0';
-end if;
+                end if;
                 flag_negativo <= '0';
                 
-            when "001" =>   -- RESTA (antes "01")
+            when "001" =>   -- RESTA
                 resultado <= resultado_suma_resta;
-flag_overflow <= '0';
-                flag_negativo <= negativo_sr;
-
-            when "010" =>   -- MULTIPLICACIÓN (antes "10")
+                flag_overflow <= '0'; -- Overflow no se maneja en resta
+                flag_negativo <= negativo_sr_int; -- Flag de signo del sumador
+                
+            when "010" =>   -- MULTIPLICACIÓN
                 resultado <= resultado_mult;
-if resultado_mult > "10011100001111" then  -- 9999 en binario
-                    flag_overflow <= '1';
-else
-                    flag_overflow <= '0';
-end if;
+                flag_overflow <= overflow_mult_int; -- Flag de overflow del multiplicador
+                flag_negativo <= '0';
+                
+            when "011" =>   -- DIVISIÓN
+                resultado <= resultado_div_cociente;
+                flag_overflow <= overflow_div_int; -- Flag de div por cero
                 flag_negativo <= '0';
 
-            -- ****** LÓGICA NUEVA ******
-            when "011" =>   -- DIVISIÓN (A / B)
-                if unsigned(binario_B) = 0 then
-                    resultado <= (others => '1'); -- Error (FFFF)
-                    flag_overflow <= '1'; -- Indicar error de división por cero
-                    flag_negativo <= '0';
-                else
-                    resultado <= std_logic_vector(unsigned(binario_A) / unsigned(binario_B));
-                    flag_overflow <= '0';
-                    flag_negativo <= '0';
-                end if;
-
-            when "100" =>   -- MÓDULO (A MOD B)
-                 if unsigned(binario_B) = 0 then
-                    resultado <= (others => '1'); -- Error (FFFF)
-                    flag_overflow <= '1'; -- Indicar error de división por cero
-                    flag_negativo <= '0';
-                else
-                    resultado <= std_logic_vector(unsigned(binario_A) mod unsigned(binario_B));
-                    flag_overflow <= '0';
-                    flag_negativo <= '0';
-                end if;
-            -- ****** FIN LÓGICA NUEVA ******
+            when "100" =>   -- MÓDULO
+                resultado <= resultado_div_residuo;
+                flag_overflow <= overflow_div_int; -- Flag de div por cero
+                flag_negativo <= '0';
                 
             when others =>
                 resultado <= (others => '0');
-flag_overflow <= '0';
+                flag_overflow <= '0';
                 flag_negativo <= '0';
         end case;
     end process;
+    
 end Behavioral;
