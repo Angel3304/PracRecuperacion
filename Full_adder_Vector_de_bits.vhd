@@ -20,20 +20,20 @@ architecture Behavioral of sumador_14bits_simple is
     end component;
     
     signal C : std_logic_vector(14 downto 0);
-    signal B_comp : std_logic_vector(13 downto 0);
+    --signal B_comp : std_logic_vector(13 downto 0);
 	 signal Res_internal : std_logic_vector(13 downto 0);
 	 
 begin
     -- Para resta: complemento a 2 de B (invertir bits y sumar 1)
-    B_comp <= not B when op_resta = '1' else B;
+    --B_comp <= not B when op_resta = '1' else B;
     C(0) <= op_resta;  -- Carry inicial = 1 para resta, 0 para suma
     
     gen_adder: for i in 0 to 13 generate
         adder_bit: sumador_restador
             port map(
                 a => A(i),
-                b => B_comp(i),
-                x => '0',
+                b => B(i),--B_comp(i),
+                x => op_resta,
                 cin => C(i),
                 cout => C(i+1),
 					 s => Res_internal(i)

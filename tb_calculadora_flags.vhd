@@ -63,13 +63,13 @@ architecture Behavioral of tb_calculadora_flags is
         -- 3. Mantener presionado para el antirrebote
         -- El PDF pide 10ms[cite: 211]. El debounce en escaneo.vhd es de 10000 ciclos.
         -- 20ms es un tiempo seguro.
-        wait for 20 us;
+        wait for 20 ms;
         
         -- 4. Soltar la tecla
         s_rows_out <= "1111";
         
         -- 5. Esperar un poco antes de la siguiente tecla
-        wait for 20 us;
+        wait for 20 ms;
     end procedure press_key;
 
 
