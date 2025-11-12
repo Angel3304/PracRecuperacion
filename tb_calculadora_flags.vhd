@@ -150,9 +150,9 @@ begin -- Inicio de la arquitectura
         
         wait for 100 us; -- Esperar a que la lÃ³gica se estabilice
         if (s_led_overflow = '1' and s_led_negativo = '0') then
-			report "CASO 1 VERIFICADO: Overflow=1, Negativo=0";
+				report "CASO 1 VERIFICADO: Overflow=1, Negativo=0";
 		  else
-			report "CASO 1 FALLIDO! (Flags incorrectos)" severity error;
+				report "CASO 1 FALLIDO! (Flags incorrectos)" severity error;
 		  end if;
         
         press_key(s_rows, C3, R0); -- A (Resetear FSM)
@@ -176,7 +176,7 @@ begin -- Inicio de la arquitectura
         if (s_led_overflow = '0' and s_led_negativo = '1') then
             report "CASO 2 VERIFICADO: Overflow=0, Negativo=1";
 		  else
-			report "CASO 2 FALLIDO! (100-500)" severity error;
+				report "CASO 2 FALLIDO! (100-500)" severity error;
 		  end if;
         
         press_key(s_rows, C3, R0); -- A (Resetear FSM)
@@ -202,7 +202,8 @@ begin -- Inicio de la arquitectura
         -- Asumimos que 200*100 = 20000 excede tu rango de 14 bits con signo.
         if (s_led_overflow = '1') then
             report "CASO 3 VERIFICADO: Overflow=1";
-        else report "CASO 3 FALLIDO! (200*100)" severity error;
+        else 
+				report "CASO 3 FALLIDO! (200*100)" severity error;
 		  end if;
         press_key(s_rows, C3, R0); -- A (Resetear FSM)
 
@@ -225,7 +226,8 @@ begin -- Inicio de la arquitectura
         wait for 100 us;
         if (s_led_overflow = '0' and s_led_negativo = '0') then
             report "CASO 4 VERIFICADO: Overflow=0, Negativo=0";
-        else report "CASO 4 FALLIDO! (1234+567)" severity error;
+        else 
+				report "CASO 4 FALLIDO! (1234+567)" severity error;
 		  end if;
         report "FINALIZADO"
 		  severity note;
