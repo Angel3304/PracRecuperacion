@@ -7,6 +7,7 @@ entity display_7seg is
         clk : in STD_LOGIC;
         reset : in STD_LOGIC;
         bcd_entrada : in STD_LOGIC_VECTOR(15 downto 0);
+		  signo : in STD_LOGIC;
         displays : out STD_LOGIC_VECTOR(3 downto 0);
         segmentos : out STD_LOGIC_VECTOR(6 downto 0)
     );
@@ -56,9 +57,15 @@ begin
                 when 2 =>
                     current_digit <= digits(2);  -- Centenas
                     displays <= "0100";
-                when others =>
-                    current_digit <= digits(3);  -- Miles
-                    displays <= "1000";
+                when others => -- Miles (Display 3)
+                if signo = '1' then
+                    -- Usar un código especial para el signo '-'
+                    -- (p.ej. "1111")
+                    current_digit <= "1111"; 
+                else
+                    current_digit <= digits(3); -- Miles
+                end if;
+                displays <= "1000";
             end case;
 
             -- Decodificación
@@ -73,6 +80,7 @@ begin
                 when "0111" => segmentos <= "1111000"; -- 7
                 when "1000" => segmentos <= "0000000"; -- 8
                 when "1001" => segmentos <= "0010000"; -- 9
+					 when "1111" => segmentos <= "0111111"; -- Signo '-'
                 when others => segmentos <= "1111111"; -- apagado
             end case;
         end if;

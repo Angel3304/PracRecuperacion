@@ -26,6 +26,9 @@ architecture Behavioral of ALU_completa is
     signal negativo_sr_int : std_logic;
     signal overflow_mult_int : std_logic;
     signal overflow_div_int : std_logic; -- NUEVO (para división por cero)
+	 signal A_msb : STD_LOGIC;
+    signal B_msb_eff : STD_LOGIC; -- Bit de signo efectivo de B (invertido si es resta)
+    signal R_msb : STD_LOGIC;
     
     -- Componente Sumador/Restador (de Full_adder_Vector_de_bits.vhd)
     component sumador_14bits_simple 
@@ -60,6 +63,11 @@ architecture Behavioral of ALU_completa is
     end component;
     
 begin
+
+	A_msb <= binario_A(13);
+	R_msb <= resultado_suma_resta(13);
+	B_msb_eff <= binario_B(13) xor operacion(0);
+	
     -- Instanciación del Sumador/Restador
     U_SUM_REST: sumador_14bits_simple 
         port map (
@@ -92,43 +100,53 @@ begin
         
     -- Proceso combinacional para seleccionar la SALIDA y los FLAGS
     process(operacion, resultado_suma_resta, resultado_mult, resultado_div_cociente, resultado_div_residuo,
-            negativo_sr_int, overflow_mult_int, overflow_div_int, resultado_suma_resta)
-    begin
-        -- Lógica de Flags por defecto
-        flag_overflow <= '0';
-        flag_negativo <= '0';
-        
-        -- Selección de resultado
-        case operacion is
-            when "000" =>   -- SUMA
-                resultado <= resultado_suma_resta;
-                -- Lógica de overflow para SUMA (mayor a 9999)
-                if resultado_suma_resta > "10011100001111" then
-                    flag_overflow <= '1';
-                else
-                    flag_overflow <= '0';
-                end if;
-                flag_negativo <= '0';
-                
-            when "001" =>   -- RESTA
-                resultado <= resultado_suma_resta;
-                flag_overflow <= '0'; -- Overflow no se maneja en resta
-                flag_negativo <= negativo_sr_int; -- Flag de signo del sumador
-                
-            when "010" =>   -- MULTIPLICACIÓN
-                resultado <= resultado_mult;
-                flag_overflow <= overflow_mult_int; -- Flag de overflow del multiplicador
-                flag_negativo <= '0';
-                
-            when "011" =>   -- DIVISIÓN
-                resultado <= resultado_div_cociente;
-                flag_overflow <= overflow_div_int; -- Flag de div por cero
-                flag_negativo <= '0';
+        negativo_sr_int, overflow_mult_int, overflow_div_int, 
+        A_msb, B_msb_eff, R_msb) -- Añadir los MSB
+begin
+    -- Lógica de Flags por defecto
+    flag_overflow <= '0';
+    flag_negativo <= '0';
 
-            when "100" =>   -- MÓDULO
-                resultado <= resultado_div_residuo;
-                flag_overflow <= overflow_div_int; -- Flag de div por cero
-                flag_negativo <= '0';
+    -- Selección de resultado
+    case operacion is
+        when "000" =>   -- SUMA
+            resultado <= resultado_suma_resta;
+
+            -- NUEVA LÓGICA DE OVERFLOW (C2) para SUMA
+            -- Overflow si (A>0 y B>0 -> Res<0) o (A<0 y B<0 -> Res>0)
+            if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
+                flag_overflow <= '1';
+            else
+                flag_overflow <= '0';
+            end if;
+            -- NUEVA LÓGICA DE SIGNO (C2)
+            flag_negativo <= R_msb;
+
+        when "001" =>   -- RESTA
+            resultado <= resultado_suma_resta;
+
+            -- NUEVA LÓGICA DE OVERFLOW (C2) para RESTA (es la misma)
+            if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
+                flag_overflow <= '1';
+            else
+                flag_overflow <= '0';
+            end if;
+            -- NUEVA LÓGICA DE SIGNO (C2)
+            flag_negativo <= R_msb;
+			when "010" =>   -- MULTIPLICACIÓN
+				resultado <= resultado_mult;
+				flag_overflow <= overflow_mult_int;
+				flag_negativo <= resultado_mult(13);
+			
+			when "011" =>   -- DIVISIÓN
+            resultado <= resultado_div_cociente;
+            flag_overflow <= overflow_div_int; -- Flag de div por cero
+            flag_negativo <= resultado_div_cociente(13); -- Asignar signo del cociente
+			
+			when "100" =>   -- MÓDULO
+            resultado <= resultado_div_residuo;
+            flag_overflow <= overflow_div_int; -- Flag de div por cero
+            flag_negativo <= resultado_div_residuo(13); -- Asignar signo del residuo
                 
             when others =>
                 resultado <= (others => '0');

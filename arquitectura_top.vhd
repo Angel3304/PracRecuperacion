@@ -69,7 +69,8 @@ architecture Structural of arquitectura_top is
     component binario_a_bcd is
         Port (
             binario_entrada : in STD_LOGIC_VECTOR(13 downto 0);
-            bcd_salida : out STD_LOGIC_VECTOR(15 downto 0)
+            bcd_salida : out STD_LOGIC_VECTOR(15 downto 0);
+				signo : out STD_LOGIC
         );
     end component;
     
@@ -78,6 +79,7 @@ architecture Structural of arquitectura_top is
             clk : in STD_LOGIC;
             reset : in STD_LOGIC;
             bcd_entrada : in STD_LOGIC_VECTOR(15 downto 0);
+				signo : in STD_LOGIC;
             displays : out STD_LOGIC_VECTOR(3 downto 0);
             segmentos : out STD_LOGIC_VECTOR(6 downto 0)
         );
@@ -98,8 +100,7 @@ architecture Structural of arquitectura_top is
     signal flag_overflow_int : STD_LOGIC;
     signal operacion_int : STD_LOGIC_VECTOR(2 downto 0);
 	 signal led_negativo_int : STD_LOGIC;
-    
-    -- Señal para seleccionar qué mostrar en el display
+	 signal signo_int : STD_LOGIC;
     signal bcd_a_display : STD_LOGIC_VECTOR(15 downto 0);
 
 begin
@@ -151,24 +152,24 @@ begin
             bcd_entrada => bcd_B_int,
             binario_salida => binario_B_int
         );
-    
-    -- ALU completa
-U4: ALU_completa
-    port map (
-        binario_A => binario_A_int,
-        binario_B => binario_B_int,
-        operacion => operacion_int,
-        resultado => resultado_suma_int,
-        flag_overflow => flag_overflow_int,
-        flag_negativo => led_negativo_int
-    );
+	 -- ALU completa
+	 U4: ALU_completa
+		port map (
+			binario_A => binario_A_int,
+			  binario_B => binario_B_int,
+			  operacion => operacion_int,
+			  resultado => resultado_suma_int,
+			  flag_overflow => flag_overflow_int,
+			  flag_negativo => led_negativo_int
+		);
     
     -- Convertidor binario a BCD (para mostrar resultado de la operación)
     U5: binario_a_bcd
-        port map (
-            binario_entrada => resultado_suma_int,
-            bcd_salida => bcd_resultado_int
-        );
+		 port map (
+			  binario_entrada => resultado_suma_int,
+			  bcd_salida => bcd_resultado_int,
+			  signo => signo_int -- CONECTAR SEÑAL
+		 );
     
     -- Mux para seleccionar qué mostrar en el display
     process(led_operacion_realizada_int, bcd_registro_int, bcd_resultado_int)
@@ -188,6 +189,7 @@ U4: ALU_completa
             clk => clk,
             reset => reset,
             bcd_entrada => bcd_a_display,
+				signo => signo_int,
             displays => displays,
             segmentos => segmentos
         );

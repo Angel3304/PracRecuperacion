@@ -24,6 +24,7 @@ architecture Behavioral of teclado is
     signal last_rows : STD_LOGIC_VECTOR(3 downto 0) := "1111";
     signal stable_rows : STD_LOGIC_VECTOR(3 downto 0) := "1111";
     signal key_pulse : STD_LOGIC := '0';
+	 signal latched_col_sel : INTEGER range 0 to 3 := 0;
 
 begin
     cols <= scan_cols;
@@ -47,32 +48,50 @@ begin
         end if;
     end process;
 
-    -- Antirrebote
-    process(clk, reset)
-    begin
-        if reset = '0' then
-            key_pulse <= '0';
+-- Antirrebote (VERSIÓN CORREGIDA)
+process(clk, reset)
+begin
+    if reset = '0' then
+        key_pulse <= '0';
+        debounce_counter <= 0;
+        last_rows <= "1111";
+        stable_rows <= "1111";
+        latched_col_sel <= 0; -- Resetear el latch
+
+    elsif rising_edge(clk) then
+        key_pulse <= '0';
+
+        if rows /= last_rows then
+            -- Si hay un cambio, reiniciar el contador
             debounce_counter <= 0;
-            last_rows <= "1111";
-            stable_rows <= "1111";
-        elsif rising_edge(clk) then
-            key_pulse <= '0';
-            if rows /= last_rows then
-                debounce_counter <= 0;
-            elsif debounce_counter < 10000 then
-                debounce_counter <= debounce_counter + 1;
+
+            -- *** LA CORRECCIÓN CLAVE ESTÁ AQUÍ ***
+            -- Si el cambio es una NUEVA tecla (no soltarla)
+            -- Guardamos la columna AHORA MISMO.
+            if rows /= "1111" then 
+                latched_col_sel <= col_sel; 
             end if;
-            if debounce_counter = 9999 then
-                if stable_rows /= rows then
-                    stable_rows <= rows;
-                    if rows /= "1111" then
-                        key_pulse <= '1';
-                    end if;
+
+        elsif debounce_counter < 9999 then
+            -- Si no hay cambio y no hemos llegado al límite, seguir contando
+            debounce_counter <= debounce_counter + 1;
+        end if;
+
+        -- Cuando el contador llega al final (tecla estable)
+        if debounce_counter = 9999 then
+            if stable_rows /= rows then
+                stable_rows <= rows;
+                if rows /= "1111" then
+                    -- La tecla es válida, generar el pulso
+                    key_pulse <= '1';
+                    -- Ya NO guardamos la columna aquí
                 end if;
             end if;
-            last_rows <= rows;
         end if;
-    end process;
+
+        last_rows <= rows;
+    end if;
+end process;
 
     -- Mapeo de teclas
 -- Mapeo de teclas
@@ -82,7 +101,7 @@ begin
         key_value <= "0000";
     elsif rising_edge(clk) then
         if key_pulse = '1' then
-            case col_sel is
+            case latched_col_sel is
                 when 0 =>
                     case stable_rows is
                         when "1110" => key_value <= "0001"; -- 1
