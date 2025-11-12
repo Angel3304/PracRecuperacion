@@ -21,6 +21,8 @@ architecture Behavioral of sumador_14bits_simple is
     
     signal C : std_logic_vector(14 downto 0);
     signal B_comp : std_logic_vector(13 downto 0);
+	 signal Res_internal : std_logic_vector(13 downto 0);
+	 
 begin
     -- Para resta: complemento a 2 de B (invertir bits y sumar 1)
     B_comp <= not B when op_resta = '1' else B;
@@ -34,10 +36,11 @@ begin
                 x => '0',
                 cin => C(i),
                 cout => C(i+1),
-                s => Res(i)
+					 s => Res_internal(i)
             );
     end generate;
     
-    Carry_out <= C(14);
-    flag_negativo <= Res(13);
+    Carry_out <= C(14);flag_negativo <= Res_internal(13);
+    Res <= Res_internal;
+	 
 end architecture;

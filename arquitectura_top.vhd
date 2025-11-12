@@ -40,7 +40,7 @@ architecture Structural of arquitectura_top is
             numero_bcd : out STD_LOGIC_VECTOR(15 downto 0);
             bcd_A : out STD_LOGIC_VECTOR(15 downto 0);
             bcd_B : out STD_LOGIC_VECTOR(15 downto 0);
-            operacion : out STD_LOGIC_VECTOR(1 downto 0);  -- 00: suma, 01: resta, 10: multiplicación
+            operacion : out STD_LOGIC_VECTOR(2 downto 0);  -- 00: suma, 01: resta, 10: multiplicación
             led_dato_A : out STD_LOGIC;
             led_dato_guardado : out STD_LOGIC;
             led_dato_B : out STD_LOGIC;
@@ -59,7 +59,7 @@ architecture Structural of arquitectura_top is
         Port (
             binario_A : in STD_LOGIC_VECTOR(13 downto 0);
             binario_B : in STD_LOGIC_VECTOR(13 downto 0);
-            operacion : in STD_LOGIC_VECTOR(1 downto 0);  -- 0: suma, 1: resta
+            operacion : in STD_LOGIC_VECTOR(2 downto 0);  -- 0: suma, 1: resta
             resultado : out STD_LOGIC_VECTOR(13 downto 0);
             flag_overflow : out STD_LOGIC;
             flag_negativo : out STD_LOGIC
@@ -96,7 +96,8 @@ architecture Structural of arquitectura_top is
     signal led_dato_B_int : STD_LOGIC;
     signal led_operacion_realizada_int : STD_LOGIC;  -- Cambiado nombre
     signal flag_overflow_int : STD_LOGIC;
-    signal operacion_int : STD_LOGIC_VECTOR(1 downto 0);
+    signal operacion_int : STD_LOGIC_VECTOR(2 downto 0);
+	 signal led_negativo_int : STD_LOGIC;
     
     -- Señal para seleccionar qué mostrar en el display
     signal bcd_a_display : STD_LOGIC_VECTOR(15 downto 0);
@@ -109,7 +110,7 @@ begin
     led_capturando_B <= led_dato_B_int;
     led_operacion_realizada <= led_operacion_realizada_int;  -- Cambiado nombre
     led_overflow <= flag_overflow_int;
-    led_negativo <= led_negativo;  -- Este vendrá de la ALU
+    led_negativo <= led_negativo_int;  -- Este vendrá de la ALU
 
     -- Instanciación de componentes
     U1: teclado
@@ -159,7 +160,7 @@ U4: ALU_completa
         operacion => operacion_int,
         resultado => resultado_suma_int,
         flag_overflow => flag_overflow_int,
-        flag_negativo => led_negativo
+        flag_negativo => led_negativo_int
     );
     
     -- Convertidor binario a BCD (para mostrar resultado de la operación)

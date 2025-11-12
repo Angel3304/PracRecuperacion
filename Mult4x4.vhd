@@ -90,3 +90,4 @@ begin
         overflow <= '0';
     end if;
 end process;
+end architecture;
