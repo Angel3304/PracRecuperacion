@@ -20,7 +20,7 @@ architecture Behavioral of teclado is
     signal scan_cols : STD_LOGIC_VECTOR(3 downto 0);
     constant SCAN_THRESHOLD : INTEGER := 50000;
 
-    signal debounce_counter : INTEGER range 0 to 9999 := 0;
+    signal debounce_counter : INTEGER range 0 to 500000 := 0;
     signal last_rows : STD_LOGIC_VECTOR(3 downto 0) := "1111";
     signal stable_rows : STD_LOGIC_VECTOR(3 downto 0) := "1111";
     signal key_pulse : STD_LOGIC := '0';
@@ -72,13 +72,13 @@ begin
                 latched_col_sel <= col_sel; 
             end if;
 
-        elsif debounce_counter < 9999 then
+        elsif debounce_counter < 500000 then
             -- Si no hay cambio y no hemos llegado al límite, seguir contando
             debounce_counter <= debounce_counter + 1;
         end if;
 
         -- Cuando el contador llega al final (tecla estable)
-        if debounce_counter = 9999 then
+        if debounce_counter = 500000 then
             if stable_rows /= rows then
                 stable_rows <= rows;
                 if rows /= "1111" then

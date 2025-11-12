@@ -18,13 +18,13 @@ architecture Behavioral of multiplicador_14bits is
 begin
     -- Solo necesitamos 7 bits de B (hasta 127) porque 127 * 99 = 12573 > 9999
     -- Productos parciales con desplazamientos
-    pp0 <= ("0000000" & (A_in(6 downto 0) and (6 downto 0 => B_in(0))));
-    pp1 <= ("000000" & (A_in(6 downto 0) and (6 downto 0 => B_in(1))) & "0");
-    pp2 <= ("00000"  & (A_in(6 downto 0) and (6 downto 0 => B_in(2))) & "00");
-    pp3 <= ("0000"   & (A_in(6 downto 0) and (6 downto 0 => B_in(3))) & "000");
-    pp4 <= ("000"    & (A_in(6 downto 0) and (6 downto 0 => B_in(4))) & "0000");
-    pp5 <= ("00"     & (A_in(6 downto 0) and (6 downto 0 => B_in(5))) & "00000");
-    pp6 <= ("0"      & (A_in(6 downto 0) and (6 downto 0 => B_in(6))) & "000000");
+    pp0 <= A_in when B_in(0) = '1' else (others => '0');
+	 pp1 <= (A_in(12 downto 0) & '0') when B_in(1) = '1' else (others => '0');
+	 pp2 <= (A_in(11 downto 0) & "00") when B_in(2) = '1' else (others => '0');
+	 pp3 <= (A_in(10 downto 0) & "000") when B_in(3) = '1' else (others => '0');
+	 pp4 <= (A_in(9 downto 0) & "0000") when B_in(4) = '1' else (others => '0');
+	 pp5 <= (A_in(8 downto 0) & "00000") when B_in(5) = '1' else (others => '0');
+	 pp6 <= (A_in(7 downto 0) & "000000") when B_in(6) = '1' else (others => '0');
 
     -- Primera suma
     c1(0) <= '0';

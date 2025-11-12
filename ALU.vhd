@@ -1,4 +1,4 @@
-library IEEE;
+	library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
 -- Ya no necesitamos NUMERIC_STD aquí
@@ -102,37 +102,43 @@ begin
     process(operacion, resultado_suma_resta, resultado_mult, resultado_div_cociente, resultado_div_residuo,
         negativo_sr_int, overflow_mult_int, overflow_div_int, 
         A_msb, B_msb_eff, R_msb) -- Añadir los MSB
+		  variable overflow_condition : std_logic;
 begin
     -- Lógica de Flags por defecto
     flag_overflow <= '0';
     flag_negativo <= '0';
 
+
     -- Selección de resultado
     case operacion is
         when "000" =>   -- SUMA
-            resultado <= resultado_suma_resta;
+        resultado <= resultado_suma_resta;
 
-            -- NUEVA LÓGICA DE OVERFLOW (C2) para SUMA
-            -- Overflow si (A>0 y B>0 -> Res<0) o (A<0 y B<0 -> Res>0)
-            if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
-                flag_overflow <= '1';
-            else
-                flag_overflow <= '0';
-            end if;
-            -- NUEVA LÓGICA DE SIGNO (C2)
-            flag_negativo <= R_msb;
+        -- Detectar overflow
+        if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
+            overflow_condition := '1';
+        else
+            overflow_condition := '0';
+        end if;
 
+        flag_overflow <= overflow_condition;
+        -- CORRECCIÓN: Solo activar flag negativo si R_msb=1 Y no hay overflow
+        flag_negativo <= R_msb and (not overflow_condition);
+		  
         when "001" =>   -- RESTA
-            resultado <= resultado_suma_resta;
+        resultado <= resultado_suma_resta;
 
-            -- NUEVA LÓGICA DE OVERFLOW (C2) para RESTA (es la misma)
-            if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
-                flag_overflow <= '1';
-            else
-                flag_overflow <= '0';
-            end if;
-            -- NUEVA LÓGICA DE SIGNO (C2)
-            flag_negativo <= R_msb;
+        -- Detectar overflow
+        if (A_msb = B_msb_eff) and (A_msb /= R_msb) then
+            overflow_condition := '1';
+        else
+            overflow_condition := '0';
+        end if;
+
+        flag_overflow <= overflow_condition;
+        -- CORRECCIÓN: Aplicar la misma lógica
+        flag_negativo <= R_msb and (not overflow_condition);
+		  
 			when "010" =>   -- MULTIPLICACIÓN
 				resultado <= resultado_mult;
 				flag_overflow <= overflow_mult_int;
